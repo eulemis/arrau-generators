@@ -1,0 +1,36 @@
+// Auto-generated CRUD JS for {{TitlePlural}}
+// Uses AppTables + buildCrudButtons; server-side via {{routeData}} (admin prefix si aplica)
+(function(){
+    const dt = AppTables.init({
+        table:'#{{kebabPlural}}Table',
+        serverSide:true,
+        processing:true,
+        ajax:{ url:'{{routeData}}', method:'GET', dataSrc:'data' },
+        pageLength:10,
+        lengthMenu:[[10,25,50,100],[10,25,50,100]],
+        columns:[
+            { data:'id', title:'ID' },
+{{jsColumns}}
+            { data:'created_at', title:'Creado', render:(v)=> v? AppUtils.normalizeDate(v,'YYYY-MM-DD HH:mm') : '' },
+            { data:null, title:'Acciones', orderable:false, searchable:false, render:(data,type,row)=>{
+                const base='{{routeIndex}}'.replace(/\/$/,'');
+                return AppUtils.buildCrudButtons({ id: row.id, baseUrl: base, token: AppUtils.csrfToken(), showDelete:true });
+            }}
+        ]
+    });
+
+    // Confirmar borrado usando SweetAlert (delegado)
+    document.addEventListener('submit', function(e){
+        const form = e.target;
+        if(form.matches('form') && form.action.match(/\/{{routePlural}}\/?[0-9]*$/)){
+            // solo formularios DELETE generados por buildCrudButtons
+            const methodInput = form.querySelector('input[name="_method"][value="DELETE"]');
+            if(methodInput){
+                e.preventDefault();
+                AppUtils.confirmDialog({ title:'¿Eliminar registro?', text:'Esta acción no se puede deshacer.' }).then(ok=>{
+                    if(ok) form.submit();
+                });
+            }
+        }
+    }, true);
+})();

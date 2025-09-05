@@ -1,0 +1,60 @@
+<?php
+
+namespace App\Http\Controllers; 
+
+use App\Http\Controllers\Controller;
+use App\Models\{{Model}};
+use Illuminate\Http\Request;
+use App\Helpers\Paginate; 
+
+class {{Model}}Controller extends Controller
+{
+    public function index()
+    {
+        return view('pages.crud.{{kebabPlural}}.index');
+    }
+
+    // Data endpoint for AppTables (server-side pagination via helper)
+    public function data(Request $request)
+    {
+        $resp = Paginate::get({{Model}}::class, $request);
+        $rows = collect($resp['aaData'] ?? []);
+        $data = $rows->map(fn($r) => $this->transform($r));
+        return response()->json([
+            'draw' => (int)($resp['draw'] ?? 0),
+            'recordsTotal' => $resp['iTotalRecords'] ?? 0,
+            'recordsFiltered' => $resp['iTotalDisplayRecords'] ?? 0,
+            'data' => $data,
+        ]);
+    }
+
+    public function create()
+    {
+        return view('pages.crud.{{kebabPlural}}.create');
+    }
+
+    public function store(Request $request)
+    {
+        $data = $this->validateData($request);
+        $m = {{Model}}::create($data);
+        return redirect()->route('{{routePlural}}.index')->with('success','Creado');
+    }
+
+    public function show({{Model}} ${{camel}})
+    {
+        return view('pages.crud.{{kebabPlural}}.show', compact('{{camel}}'));
+    }
+
+    public function edit({{Model}} ${{camel}})
+    {
+        return view('pages.crud.{{kebabPlural}}.edit', compact('{{camel}}'));
+    }
+
+    public function update(Request $request, {{Model}} ${{camel}})
+    {
+        $data = $this->validateData($request, ${{camel}}->id);
+        ${{camel}}->update($data);
+        return redirect()->route('{{routePlural}}.index')->with('success','Actualizado');
+    }
+
+    public function destroy({{Model}} ${{camel}})

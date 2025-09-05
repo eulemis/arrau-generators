@@ -1,0 +1,22 @@
+<x-default-layout>
+  @section('title') Crear {{TitleSingular}} @endsection
+  @section('breadcrumbs')
+    {{ Breadcrumbs::render('{{routePlural}}.create') }}
+  @endsection
+  <div class="card">
+    <div class="card-header align-items-center d-flex gap-2">
+  <a href="{{ route('{{adminRoutePrefix}}{{routePlural}}.index') }}" class="btn btn-sm btn-light">&larr;</a>
+      <h3 class="card-title mb-0">Crear {{TitleSingular}}</h3>
+    </div>
+    <div class="card-body">
+      <form action="{{ route('{{adminRoutePrefix}}{{routePlural}}.store') }}" method="POST" id="{{kebab}}Form">
+        @include('{{formIncludePath}}')
+        <div class="mt-6">
+          <button type="submit" class="btn btn-primary me-2">Guardar</button>
+          <a href="{{ route('{{adminRoutePrefix}}{{routePlural}}.index') }}" class="btn btn-light">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</x-default-layout>
+

@@ -1,0 +1,15 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+{{softDeleteImport}}
+
+class {{Model}} extends Model
+{
+    use HasFactory{{softDeleteTraitLine}};
+
+    protected $fillable = {{fillable}};
+}
+

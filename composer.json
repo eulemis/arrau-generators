@@ -1,0 +1,13 @@
+{
+  "name": "arrau/generators",
+  "description": "Generadores CRUD y API para Laravel",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "Arrau\\Generators\\": "src/"
+    }
+  },
+  "require": {
+    "illuminate/support": ">=11.0"
+  }
+}

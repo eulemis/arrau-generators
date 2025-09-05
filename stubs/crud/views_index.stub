@@ -1,0 +1,22 @@
+<x-default-layout>
+  @section('title') {{TitlePlural}} @endsection
+  @section('breadcrumbs')
+    {{ Breadcrumbs::render('{{routePlural}}.index') }}
+  @endsection
+  @php( function_exists('addVendor') && addVendor('datatables') )
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h3 class="card-title mb-0">Listado {{TitlePlural}}</h3>
+      <div class="card-toolbar">
+  <a href="{{ route('{{adminRoutePrefix}}{{routePlural}}.create') }}" class="btn btn-primary">Nuevo</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <table id="{{kebabPlural}}Table" class="table table-row-bordered table-striped align-middle w-100"></table>
+    </div>
+  </div>
+  @push('scripts')
+    <script src="/js/crud/{{kebabPlural}}.js"></script>
+  @endpush
+</x-default-layout>
+
