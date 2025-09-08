@@ -1,0 +1,59 @@
+<?php
+
+namespace App\Services\{{pluralModel}};
+
+use App\Models\{{Model}};
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class {{Model}}Service implements {{Model}}ServiceInterface
+{
+    public function query(): \Illuminate\Database\Eloquent\Builder
+    {
+        return {{Model}}::query();
+    }
+
+    public function paginate(int $perPage = 15): LengthAwarePaginator
+    {
+        return {{Model}}::query()->latest()->paginate($perPage);
+    }
+
+    public function create(array $data): {{Model}}
+    {
+        $data = $this->beforeCreate($data);
+        $instance = {{Model}}::create($data);
+        $this->afterCreate($instance);
+        return $instance;
+    }
+
+    public function update({{Model}} $instance, array $data): {{Model}}
+    {
+        $data = $this->beforeUpdate($instance, $data);
+        $instance->update($data);
+        $this->afterUpdate($instance);
+        return $instance;
+    }
+
+    public function delete({{Model}} $instance): void
+    {
+        $this->beforeDelete($instance);
+        $instance->delete();
+        $this->afterDelete($instance);
+    }
+
+    // Hooks opcionales para lógica extra
+    protected function beforeCreate(array $data): array { return $data; }
+    protected function afterCreate({{Model}} $instance): void {}
+    protected function beforeUpdate({{Model}} $instance, array $data): array { return $data; }
+    protected function afterUpdate({{Model}} $instance): void {}
+    protected function beforeDelete({{Model}} $instance): void {}
+    protected function afterDelete({{Model}} $instance): void {}
+}
+
+interface {{Model}}ServiceInterface
+{
+    public function query(): \Illuminate\Database\Eloquent\Builder;
+    public function paginate(int $perPage = 15): LengthAwarePaginator;
+    public function create(array $data): {{Model}};
+    public function update({{Model}} $instance, array $data): {{Model}};
+    public function delete({{Model}} $instance): void;
+}

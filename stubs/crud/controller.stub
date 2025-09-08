@@ -1,60 +1,48 @@
 <?php
 
-namespace App\Http\Controllers; 
+namespace App\Http\Controllers\Admin\{{pluralModel}};
 
 use App\Http\Controllers\Controller;
 use App\Models\{{Model}};
 use Illuminate\Http\Request;
-use App\Helpers\Paginate; 
+use App\Services\{{pluralModel}}\{{Model}}Service;
+use App\Http\Requests\Admin\{{pluralModel}}\{{Model}}StoreRequest;
+use App\Http\Requests\Admin\{{pluralModel}}\{{Model}}UpdateRequest;
+use App\Helpers\Paginate as DataTablePaginate;
 
 class {{Model}}Controller extends Controller
 {
-    public function index()
+    protected string $title = '{{routePlural}}.index_title';
+    protected string $prefix = 'admin.{{routePlural}}';
+
+    public function __construct(private readonly {{Model}}Service $service)
     {
-        return view('pages.crud.{{kebabPlural}}.index');
+        $this->authorizeResource({{Model}}::class, '{{camel}}');
     }
 
-    // Data endpoint for AppTables (server-side pagination via helper)
-    public function data(Request $request)
+    protected function breadcrumbs(): array
     {
-        $resp = Paginate::get({{Model}}::class, $request);
-        $rows = collect($resp['aaData'] ?? []);
-        $data = $rows->map(fn($r) => $this->transform($r));
-        return response()->json([
-            'draw' => (int)($resp['draw'] ?? 0),
-            'recordsTotal' => $resp['iTotalRecords'] ?? 0,
-            'recordsFiltered' => $resp['iTotalDisplayRecords'] ?? 0,
-            'data' => $data,
-        ]);
+        return [
+            ['page' => route('dashboard'), 'title' => __('Dashboard')],
+            ['page' => route('admin.{{routePlural}}.index'), 'title' => __('{{routePlural}}.index_title')],
+        ];
     }
 
-    public function create()
-    {
-        return view('pages.crud.{{kebabPlural}}.create');
-    }
+    public function index() { return view('admin.{{routePlural}}.index'); }
 
-    public function store(Request $request)
-    {
-        $data = $this->validateData($request);
-        $m = {{Model}}::create($data);
-        return redirect()->route('{{routePlural}}.index')->with('success','Creado');
-    }
+    public function data(Request $request) { return response()->json(DataTablePaginate::get({{Model}}::class, $request)); }
 
-    public function show({{Model}} ${{camel}})
-    {
-        return view('pages.crud.{{kebabPlural}}.show', compact('{{camel}}'));
-    }
+    public function create() { return view('admin.{{routePlural}}.create', ['{{camel}}' => new {{Model}}()]); }
 
-    public function edit({{Model}} ${{camel}})
-    {
-        return view('pages.crud.{{kebabPlural}}.edit', compact('{{camel}}'));
-    }
+    public function store({{Model}}StoreRequest $request) { $this->service->create($request->validated()); return redirect()->route('admin.{{routePlural}}.index')->with('success', __('{{routePlural}}.created')); }
 
-    public function update(Request $request, {{Model}} ${{camel}})
-    {
-        $data = $this->validateData($request, ${{camel}}->id);
-        ${{camel}}->update($data);
-        return redirect()->route('{{routePlural}}.index')->with('success','Actualizado');
-    }
+    public function show({{Model}} ${{camel}}) { return view('admin.{{routePlural}}.show', compact('{{camel}}')); }
 
-    public function destroy({{Model}} ${{camel}})
+    public function edit({{Model}} ${{camel}}) { return view('admin.{{routePlural}}.edit', compact('{{camel}}')); }
+
+    public function update({{Model}}UpdateRequest $request, {{Model}} ${{camel}}) { $this->service->update(${{camel}}, $request->validated()); return redirect()->route('admin.{{routePlural}}.index')->with('success', __('{{routePlural}}.updated')); }
+
+    public function destroy({{Model}} ${{camel}}) { $this->service->delete(${{camel}}); return back()->with('success', __('{{routePlural}}.deleted')); }
+
+    public function delete({{Model}} ${{camel}}) { return view('admin.{{routePlural}}.delete', compact('{{camel}}')); }
+}

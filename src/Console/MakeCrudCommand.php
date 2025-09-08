@@ -16,24 +16,119 @@ class MakeCrudCommand extends Command
 
     public function handle(): int
     {
-        $name = Str::studly($this->argument('name'));
-        $model = $name;
+        // 1. Inicialización de variables principales
+        $name = $this->argument('name');
+        $model = Str::studly($name);
         $Model = $model;
-        $camel = Str::camel($model);
-        $kebab = Str::kebab($model);
         $pluralModel = Str::pluralStudly($model);
-        $camelPlural = Str::camel($pluralModel);
         $kebabPlural = Str::kebab($pluralModel);
-        $table = Str::snake($pluralModel);
-        $TitleSingular = Str::title(Str::snake($model,' '));
-        $TitlePlural = Str::title(Str::snake($pluralModel,' '));
-        $routePlural = Str::kebab($pluralModel);
-
         $stubPath = __DIR__.'/../../stubs/crud';
-        if(!is_dir($stubPath)){
-            $this->error('No existen stubs en '.$stubPath);
-            return 1;
+        $TitlePlural = Str::title(str_replace('-', ' ', $kebabPlural));
+        $table = Str::snake(Str::pluralStudly($name));
+        $camel = Str::camel($name);
+
+        // 2. Procesamiento de campos y generación de archivos principales
+        $rawFields = $this->option('fields');
+        $tableExists = Schema::hasTable($table);
+        $schemaDerived = null;
+        if($tableExists && !$rawFields){
+            $schemaDerived = $this->inspectTableSchema($table);
+            if(!empty($schemaDerived['fields'])){
+                $this->info('Tabla existente detectada; reglas derivadas desde esquema.');
+            }
         }
+        $parsed = $schemaDerived ? $schemaDerived : $this->parseFields($rawFields);
+        $fillableArr = array_map(fn($f) => "'$f'", $parsed['fields']);
+        $fillable = '[ '.implode(', ', $fillableArr).' ]';
+
+        $useSoft = (bool)$this->option('softdelete');
+        $softDeleteImport = $useSoft ? 'use Illuminate\\Database\\Eloquent\\SoftDeletes;' : '';
+        $softDeleteTraitLine = $useSoft ? ', SoftDeletes' : '';
+        $softDeletesMigration = $useSoft ? '            $table->softDeletes();' : '';
+
+        $migrationColumns = $this->buildMigrationColumns($parsed['definitions']);
+        $validationRules = $this->buildValidationRules($parsed['definitions']);
+        $transformArray = $this->buildTransformArray($parsed['fields']);
+        $jsColumns = $this->buildJsColumns($parsed['fields']);
+        [$formFields, $showFields] = $this->buildFieldSnippets($parsed['definitions'], $camel);
+
+        $isLegacy = (bool)$this->option('legacy');
+        $force = (bool)$this->option('force');
+        $generateService = !$this->option('no-service');
+        $generateFormRequests = !$this->option('no-form-requests');
+        $generatePermissions = !$this->option('no-permissions');
+        $assignRole = $this->option('assign-permissions-to');
+        $assignUsersRaw = $this->option('assign-permissions-user');
+        $assignUserIds = $assignUsersRaw ? array_filter(array_map('trim', explode(',', $assignUsersRaw))) : [];
+        $withExtendedPerms = (bool)$this->option('with-extended-perms');
+        $adminRoutePrefix = $isLegacy ? '' : 'admin.';
+
+        // 3. Generación de archivos principales (model, controller, service, requests, vistas, js, etc.)
+        // Requests (aseguramos regeneración usando StubWriter para normalizar apertura PHP)
+        if($generateFormRequests){
+            $requestDir = app_path('Http/Requests/Admin/'.$pluralModel);
+            if(!is_dir($requestDir)) mkdir($requestDir, 0777, true);
+            $storeTarget = $requestDir.'/'.$model.'StoreRequest.php';
+            $updateTarget = $requestDir.'/'.$model.'UpdateRequest.php';
+            StubWriter::write($stubPath.'/request_store.stub', $storeTarget, compact('Model','validationRules','pluralModel'));
+            StubWriter::write($stubPath.'/request_update.stub', $updateTarget, compact('Model','validationRules','pluralModel'));
+            $this->info('FormRequests Store y Update generados');
+        }
+
+        // 4. Policy
+        $policyDir = app_path('Policies');
+        if(!is_dir($policyDir)) mkdir($policyDir, 0777, true);
+        $policyTarget = $policyDir.'/'.$model.'Policy.php';
+        StubWriter::write($stubPath.'/policy.stub', $policyTarget, compact('Model'));
+        $this->info('Policy generado');
+
+        // 5. Rutas admin
+        $adminRoutes = base_path('routes/admin.php');
+        $webRoutes = base_path('routes/web.php');
+        $routePlural = strtolower($kebabPlural);
+        $routeBlock = "\n// Admin CRUD $model\nRoute::prefix('admin')->name('admin.')->group(function(){\n    Route::get('$routePlural/data', [\\App\\Http\\Controllers\\Admin\\$pluralModel\\{$model}Controller::class,'data'])->name('$routePlural.data');\n    Route::resource('$routePlural', \\App\\Http\\Controllers\\Admin\\$pluralModel\\{$model}Controller::class);\n});\n";
+        if(file_exists($adminRoutes)) {
+            file_put_contents($adminRoutes, $routeBlock, FILE_APPEND);
+            $this->info('Rutas añadidas en admin.php');
+        } else {
+            file_put_contents($webRoutes, $routeBlock, FILE_APPEND);
+            $this->info('Rutas añadidas en web.php');
+        }
+
+        // 6. Breadcrumbs
+        $breadcrumbsFile = base_path('routes/breadcrumbs.php');
+        if(file_exists($breadcrumbsFile)) {
+            $bc = file_get_contents($breadcrumbsFile);
+            $needle = "'$routePlural.index'";
+            if(!str_contains($bc, $needle)) {
+                $breadcrumbBlock = "\n// $Model breadcrumbs\n"
+                    . "Breadcrumbs::for('$routePlural.index', function (BreadcrumbTrail \$trail) {\n"
+                    . "    \$trail->parent('dashboard');\n"
+                    . "    \$trail->push('$TitlePlural', route('admin.$routePlural.index'));\n"
+                    . "});\n"
+                    . "Breadcrumbs::for('$routePlural.create', function (BreadcrumbTrail \$trail) {\n"
+                    . "    \$trail->parent('$routePlural.index');\n"
+                    . "    \$trail->push('Crear', route('admin.$routePlural.create'));\n"
+                    . "});\n"
+                    . "Breadcrumbs::for('$routePlural.edit', function (BreadcrumbTrail \$trail, $Model \$item) {\n"
+                    . "    \$trail->parent('$routePlural.index');\n"
+                    . "    \$trail->push('Editar', route('admin.$routePlural.edit', \$item));\n"
+                    . "});\n"
+                    . "Breadcrumbs::for('$routePlural.show', function (BreadcrumbTrail \$trail, $Model \$item) {\n"
+                    . "    \$trail->parent('$routePlural.index');\n"
+                    . "    \$trail->push('Detalle', route('admin.$routePlural.show', \$item));\n"
+                    . "});\n";
+                // Convertir saltos de línea y escapes a PHP plano
+                $breadcrumbBlock = str_replace(['\\n', '\\$'], ["\n", "$"], $breadcrumbBlock);
+                file_put_contents($breadcrumbsFile, rtrim($bc) . "\n" . $breadcrumbBlock . "\n");
+                $this->info('Breadcrumbs añadidos');
+            } else {
+                $this->line('Breadcrumbs ya existen, saltando');
+            }
+        }
+
+        $this->info('CRUD generado exitosamente.');
+        return 0;
 
         $rawFields = $this->option('fields');
         $tableExists = Schema::hasTable($table);
@@ -90,7 +185,123 @@ class MakeCrudCommand extends Command
                 }
             }
         }
-        // ...continúa la lógica migrada...
+
+        // 2. Controller (Admin)
+        $controllerDir = app_path('Http/Controllers/Admin/'.$pluralModel);
+        if(!is_dir($controllerDir)) mkdir($controllerDir, 0777, true);
+        $controllerTarget = $controllerDir.'/'.$model.'Controller.php';
+        StubWriter::write($stubPath.'/controller.stub', $controllerTarget, compact('Model','camel','kebab','pluralModel','camelPlural','kebabPlural','TitleSingular','TitlePlural','routePlural'));
+        $this->info('Controller admin '.(file_exists($controllerTarget) ? 'sobrescrito':'creado'));
+
+        // 3. Migration (solo si la tabla no existe)
+        if(!$tableExists){
+            $migrationName = date('Y_m_d_His').'_create_'.strtolower($table).'_table.php';
+            $migrationTarget = database_path('migrations/'.$migrationName);
+            StubWriter::write($stubPath.'/migration.stub', $migrationTarget, compact('table','migrationColumns','softDeletesMigration'));
+            $this->info('Migration creada: '.$migrationName);
+        }
+
+        // 4. Service y ServiceInterface (Admin)
+        if($generateService){
+            $serviceDir = app_path('Services/'.$pluralModel);
+            if(!is_dir($serviceDir)) mkdir($serviceDir, 0777, true);
+            $serviceTarget = $serviceDir.'/'.$model.'Service.php';
+            $interfaceTarget = $serviceDir.'/'.$model.'ServiceInterface.php';
+            StubWriter::write($stubPath.'/service.stub', $serviceTarget, compact('model','Model','pluralModel'));
+            StubWriter::write($stubPath.'/service_interface.stub', $interfaceTarget, compact('model','Model','pluralModel'));
+            $this->info('Service y ServiceInterface generados');
+        }
+
+        // 5. FormRequests (Admin, Store y Update)
+        if($generateFormRequests){
+            $requestDir = app_path('Http/Requests/Admin/'.$pluralModel);
+            if(!is_dir($requestDir)) mkdir($requestDir, 0777, true);
+            $storeTarget = $requestDir.'/'.$model.'StoreRequest.php';
+            $updateTarget = $requestDir.'/'.$model.'UpdateRequest.php';
+            StubWriter::write($stubPath.'/request_store.stub', $storeTarget, compact('Model','validationRules','pluralModel'));
+            StubWriter::write($stubPath.'/request_update.stub', $updateTarget, compact('Model','validationRules','pluralModel'));
+            $this->info('FormRequests Store y Update generados');
+        }
+
+        // 6. Vistas (todas las necesarias, admin o legacy)
+        if ($isLegacy) {
+            $viewDir = resource_path('views/pages/crud/'.strtolower($kebabPlural));
+        } else {
+            $viewDir = resource_path('views/admin/'.strtolower($kebabPlural));
+        }
+        if(!is_dir($viewDir)) mkdir($viewDir, 0777, true);
+
+        $viewMap = [
+            'index.blade.php'   => '/views_index.stub',
+            'create.blade.php'  => '/views_create.stub',
+            'edit.blade.php'    => '/views_edit.stub',
+            'show.blade.php'    => '/views_show.stub',
+            '_form.blade.php'   => '/views_form.stub',
+        ];
+        foreach ($viewMap as $file => $stub) {
+            $target = $viewDir . '/' . $file;
+            StubWriter::write($stubPath . $stub, $target, compact('Model','model','camel','kebab','pluralModel','camelPlural','kebabPlural','TitleSingular','TitlePlural','routePlural','jsColumns','formFields','showFields'));
+        }
+        $this->info('Vistas CRUD generadas en ' . $viewDir);
+
+        // 7. JS inicializador
+        $jsDir = public_path('js/crud');
+        if(!is_dir($jsDir)) mkdir($jsDir, 0777, true);
+        $jsTarget = $jsDir.'/'.$kebabPlural.'.js';
+        StubWriter::write($stubPath.'/js.stub', $jsTarget, compact('kebabPlural','routePlural','TitlePlural','jsColumns'));
+        $this->info('JS inicializador generado');
+
+        // 8. Traducciones (es y en)
+        $langDirEs = resource_path('lang/es');
+        $langDirEn = resource_path('lang/en');
+        if(!is_dir($langDirEs)) mkdir($langDirEs, 0777, true);
+        if(!is_dir($langDirEn)) mkdir($langDirEn, 0777, true);
+        $translationKey = Str::snake($pluralModel);
+        $fieldsLines = array_map(function($f){ return "    '$f' => '".Str::title(str_replace(['_','-'],' ',$f))."',"; }, $parsed['fields']);
+        $fieldsExport = implode("\n", $fieldsLines);
+        $esTarget = $langDirEs.'/'.$translationKey.'.php';
+        $enTarget = $langDirEn.'/'.$translationKey.'.php';
+        $esContent = "<?php\nreturn [\n    'index_title' => '$TitlePlural',\n    'singular_title' => '$TitleSingular',\n$fieldsExport\n];\n";
+        $enContent = "<?php\nreturn [\n    'index_title' => '$TitlePlural',\n    'singular_title' => '$TitleSingular',\n$fieldsExport\n];\n";
+        file_put_contents($esTarget, $esContent);
+        file_put_contents($enTarget, $enContent);
+        $this->info('Archivos de traducción generados');
+
+        // 9. Policy
+        $policyDir = app_path('Policies');
+        if(!is_dir($policyDir)) mkdir($policyDir, 0777, true);
+        $policyTarget = $policyDir.'/'.$model.'Policy.php';
+        StubWriter::write($stubPath.'/policy.stub', $policyTarget, compact('Model'));
+        $this->info('Policy generado');
+
+        // 10. Rutas admin
+        $adminRoutes = base_path('routes/admin.php');
+        $webRoutes = base_path('routes/web.php');
+        $routePlural = strtolower($kebabPlural);
+        $routeBlock = "\n// Admin CRUD $model\nRoute::prefix('admin')->name('admin.')->group(function(){\n    Route::get('$routePlural/data', [\\App\\Http\\Controllers\\Admin\\$pluralModel\\{$model}Controller::class,'data'])->name('$routePlural.data');\n    Route::resource('$routePlural', \\App\\Http\\Controllers\\Admin\\$pluralModel\\{$model}Controller::class);\n});\n";
+        if(file_exists($adminRoutes)) {
+            file_put_contents($adminRoutes, $routeBlock, FILE_APPEND);
+            $this->info('Rutas añadidas en admin.php');
+        } else {
+            file_put_contents($webRoutes, $routeBlock, FILE_APPEND);
+            $this->info('Rutas añadidas en web.php');
+        }
+
+        // 11. Breadcrumbs
+        $breadcrumbsFile = base_path('routes/breadcrumbs.php');
+        if(file_exists($breadcrumbsFile)) {
+            $bc = file_get_contents($breadcrumbsFile);
+            $needle = "'$routePlural.index'";
+            if(!str_contains($bc, $needle)) {
+                $breadcrumbBlock = "\n// $Model breadcrumbs\nBreadcrumbs::for('$routePlural.index', function (BreadcrumbTrail \\$trail) {\n    \\$trail->parent('dashboard');\n    \\$trail->push('$TitlePlural', route('admin.$routePlural.index'));\n});\nBreadcrumbs::for('$routePlural.create', function (BreadcrumbTrail \\$trail) {\n    \\$trail->parent('$routePlural.index');\n    \\$trail->push('Crear', route('admin.$routePlural.create'));\n});\nBreadcrumbs::for('$routePlural.edit', function (BreadcrumbTrail \\$trail, $Model \\$item) {\n    \\$trail->parent('$routePlural.index');\n    \\$trail->push('Editar', route('admin.$routePlural.edit', \\$item));\n});\nBreadcrumbs::for('$routePlural.show', function (BreadcrumbTrail \\$trail, $Model \\$item) {\n    \\$trail->parent('$routePlural.index');\n    \\$trail->push('Detalle', route('admin.$routePlural.show', \\$item));\n});\n";
+                file_put_contents($breadcrumbsFile, rtrim($bc)."\n".$breadcrumbBlock."\n");
+                $this->info('Breadcrumbs añadidos');
+            } else {
+                $this->line('Breadcrumbs ya existen, saltando');
+            }
+        }
+
+        $this->info('CRUD generado exitosamente.');
         return 0;
     }
 

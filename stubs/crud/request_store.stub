@@ -1,0 +1,11 @@
+<?php
+
+namespace App\Http\Requests\Admin\{{pluralModel}};
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class {{Model}}StoreRequest extends FormRequest
+{
+    public function authorize(): bool { return true; }
+    public function rules(): array { return {{validationRules}}; }
+}

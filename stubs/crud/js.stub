@@ -1,11 +1,11 @@
 // Auto-generated CRUD JS for {{TitlePlural}}
-// Uses AppTables + buildCrudButtons; server-side via {{routeData}} (admin prefix si aplica)
+// Uses AppTables + buildCrudButtons; server-side via URL configurado (admin prefix si aplica)
 (function(){
     const dt = AppTables.init({
         table:'#{{kebabPlural}}Table',
         serverSide:true,
         processing:true,
-        ajax:{ url:'{{routeData}}', method:'GET', dataSrc:'data' },
+        ajax:{ url: window.routeData || '{{routeData}}', method:'GET', dataSrc:'data' },
         pageLength:10,
         lengthMenu:[[10,25,50,100],[10,25,50,100]],
         columns:[
@@ -13,7 +13,7 @@
 {{jsColumns}}
             { data:'created_at', title:'Creado', render:(v)=> v? AppUtils.normalizeDate(v,'YYYY-MM-DD HH:mm') : '' },
             { data:null, title:'Acciones', orderable:false, searchable:false, render:(data,type,row)=>{
-                const base='{{routeIndex}}'.replace(/\/$/,'');
+                const base=(window.routeIndex || '{{routeIndex}}').replace(/\/$/,'');
                 return AppUtils.buildCrudButtons({ id: row.id, baseUrl: base, token: AppUtils.csrfToken(), showDelete:true });
             }}
         ]

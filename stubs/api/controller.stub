@@ -1,0 +1,29 @@
+<?php
+namespace App\Http\Controllers\Api\V1\Admin\{{PLURAL}};
+
+use App\Http\Controllers\Api\AbstractResourceController;
+use App\Http\Resources\Admin\{{PLURAL}}\{{MODEL}}Resource;
+use App\Services\{{PLURAL}}\{{MODEL}}ServiceInterface;
+use Illuminate\Http\JsonResponse;
+{{IMPORTS_FILTERS}}
+{{DOC_GROUP}}
+class {{MODEL}}Controller extends AbstractResourceController
+{
+    protected string $modelClass = \App\Models\{{MODEL}}::class;
+    protected string $resourceClass = {{MODEL}}Resource::class;
+    protected string $serviceContract = {{MODEL}}ServiceInterface::class;
+    protected ?string $translationBase = '{{PLURAL_SNAKE}}';
+
+    public function __construct(private readonly {{MODEL}}ServiceInterface $service)
+    {
+        parent::__construct();
+    }
+
+{{DOC_INDEX}}
+{{FILTERS_METHOD}}    {{DOC_STORE}}public function store($request): JsonResponse { return parent::store($request); }
+    {{DOC_SHOW}}public function show($model): JsonResponse { return parent::show($model); }
+    {{DOC_UPDATE}}public function update($request, $model): JsonResponse { return parent::update($request, $model); }
+    {{DOC_DESTROY}}public function destroy($model): JsonResponse { return parent::destroy($model); }
+}
+
+

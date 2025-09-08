@@ -1,0 +1,16 @@
+<?php
+namespace App\Services\{{PLURAL}};
+
+use App\Models\{{MODEL}};
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+interface {{MODEL}}ServiceInterface
+{
+    public function query(): \Illuminate\Database\Eloquent\Builder;
+    public function paginate(int $perPage = 15): LengthAwarePaginator;
+    public function create(array $data): {{MODEL}};
+    public function update({{MODEL}} $instance, array $data): {{MODEL}};
+    public function delete({{MODEL}} $instance): void;
+}
+
+

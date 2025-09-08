@@ -1,0 +1,15 @@
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+    <h1>{{TitlePlural}}</h1>
+    <table id="datatable" class="table table-bordered">
+        <thead>
+            <tr>
+                {!! $jsColumns !!}
+            </tr>
+        </thead>
+    </table>
+    <a href="{{ route('{{routePlural}}.create') }}" class="btn btn-primary">Crear {{TitleSingular}}</a>
+</div>
+@endsection
